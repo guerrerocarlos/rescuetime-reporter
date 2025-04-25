@@ -1,0 +1,25 @@
+{
+  "name": "rescuetime-report",
+  "version": "1.0.0",
+  "description": "Daily summary report generator for RescueTime",
+  "main": "index.ts",
+  "scripts": {
+    "report": "tsx ./index.ts",
+    "report:month": "tsx ./index.ts --month",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "rescuetime",
+    "productivity",
+    "report"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@types/node": "^22.15.2",
+    "axios": "^1.9.0",
+    "date-fns": "^4.1.0",
+    "dotenv": "^16.5.0",
+    "typescript": "^5.8.3"
+  }
+}
