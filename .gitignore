@@ -1,3 +1,5 @@
-node_modules/*
-reports/*
-.env*
+node_modules
+reports
+.env
+summaries
+context

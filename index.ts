@@ -387,6 +387,14 @@ async function generateDailyReport(date?: string): Promise<string> {
   report += `## Summary\n`;
   report += `- Total time tracked: ${summary.total_duration_formatted} (${summary.total_hours.toFixed(2)} hours)\n`;
   
+  // Calculate productive time (total time - very distracting time)
+  const productiveTimeSeconds = (summary.total_hours * 3600) - (summary.very_distracting_hours * 3600);
+  const productiveTimeHours = productiveTimeSeconds / 3600;
+  const productiveTimePercentage = (productiveTimeHours / summary.total_hours) * 100;
+  const productiveTimeFormatted = formatTime(productiveTimeSeconds);
+  
+  report += `- Total Productive time: ${productiveTimeFormatted} (${productiveTimeHours.toFixed(1)} h)\n`;
+  
   // Fix for the productivity pulse issue - ensure it's a number between 0-100
   const productivityPulse = typeof summary.productivity_pulse === 'number' && 
     summary.productivity_pulse >= 0 && summary.productivity_pulse <= 100 
@@ -467,14 +475,24 @@ async function ensureReportsDirectory() {
 async function generateMonthlyReports(year: number, month: number) {
   const startDate = startOfMonth(new Date(year, month - 1));
   const endDate = endOfMonth(new Date(year, month - 1));
+  
+  // Get the current date to limit processing for the current month
+  const currentDate = new Date();
+  const isCurrentMonth = (
+    currentDate.getFullYear() === year && 
+    currentDate.getMonth() + 1 === month
+  );
+  
+  // If this is the current month, use the current date as the end date
+  const effectiveEndDate = isCurrentMonth ? currentDate : endDate;
 
-  // Create an array of all days in the month
-  const daysInMonth = eachDayOfInterval({ start: startDate, end: endDate });
+  // Create an array of all days in the month up to today if it's current month
+  const daysInMonth = eachDayOfInterval({ start: startDate, end: effectiveEndDate });
 
   // Ensure the reports directory exists
   const reportsDir = await ensureReportsDirectory();
 
-  console.log(`Generating reports for ${format(startDate, 'MMMM yyyy')}...`);
+  console.log(`Generating reports for ${format(startDate, 'MMMM yyyy')}${isCurrentMonth ? ' (up to today)' : ''}...`);
 
   // Generate a report for each day
   for (const day of daysInMonth) {
@@ -499,7 +517,7 @@ async function generateMonthlyReports(year: number, month: number) {
     console.log(`Saved report for ${dateString} to ${fileName}`);
   }
 
-  console.log(`\nAll reports for ${format(startDate, 'MMMM yyyy')} have been generated and saved to the 'reports/' directory.`);
+  console.log(`\nAll reports for ${format(startDate, 'MMMM yyyy')}${isCurrentMonth ? ' up to today' : ''} have been generated and saved to the 'reports/' directory.`);
 }
 
 /**

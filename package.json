@@ -6,6 +6,8 @@
   "scripts": {
     "report": "tsx ./index.ts",
     "report:month": "tsx ./index.ts --month",
+    "summarize": "tsx ./summarize.ts",
+    "github-commits": "tsx ./github-commits.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
