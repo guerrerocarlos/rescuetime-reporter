@@ -49,7 +49,7 @@ April 25th, 2025: Made significant contributions focused on the Slack bot and di
 - Collaborated through Slack to ensure smooth communication on ongoing tasks and updates, facilitating effective teamwork.
 - Continued coding efforts in Visual Studio Code, specifically working on the `index.ts` file for the Slack bot, contributing to its functionality and integration.
 
-These activities were crucial in advancing the development of intelligent software agents and improving internal communication tools at rPotential.ai.
+These activities were crucial in advancing the development of intelligent software agents and improving internal communication tools.
 ```
 
 ## Setup
