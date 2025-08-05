@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { format, startOfMonth } from 'date-fns';
+import { format, startOfMonth, endOfMonth } from 'date-fns';
 import * as dotenv from 'dotenv';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -12,6 +12,8 @@ const GITHUB_USERNAME = process.env.GITHUB_USERNAME || 'your-github-username';
 
 // Date range for fetching commits (current month only)
 const endDate = new Date();
+endDate.setMonth(endDate.getMonth() - 1);
+const actualEndDate = endOfMonth(endDate);
 const startDate = startOfMonth(endDate);
 
 interface GitHubCommit {
@@ -201,7 +203,7 @@ async function main() {
     return;
   }
 
-  console.log(`Fetching commits for ${GITHUB_USERNAME} from ${format(startDate, 'yyyy-MM-dd')} to ${format(endDate, 'yyyy-MM-dd')}...`);
+  console.log(`Fetching commits for ${GITHUB_USERNAME} from ${format(startDate, 'yyyy-MM-dd')} to ${format(actualEndDate, 'yyyy-MM-dd')}...`);
 
   // Approach 1: Use Search API (most comprehensive but could hit rate limits)
   let allCommits: GitHubCommit[] = [];
@@ -263,17 +265,25 @@ async function main() {
     commitsByDate[date].push(commit);
   });
 
-  // Generate report
-  const report = [`# GitHub Commits Report - Last Month\n`];
-  report.push(`Period: ${format(startDate, 'yyyy-MM-dd')} to ${format(endDate, 'yyyy-MM-dd')}\n`);
-  report.push(`User: ${GITHUB_USERNAME}\n`);
-  report.push(`Total Commits: ${commits.length}\n`);
+  // Ensure the context/commits directory exists
+  const reportsDir = path.join(process.cwd(), 'context', 'commits');
+  if (!fs.existsSync(reportsDir)) {
+    fs.mkdirSync(reportsDir, { recursive: true });
+  }
+
+  // Generate separate reports for each day
+  const savedFiles: string[] = [];
   
-  Object.keys(commitsByDate).sort().reverse().forEach(date => {
-    report.push(`## ${date}`);
+  Object.keys(commitsByDate).sort().forEach(date => {
+    const dayCommits = commitsByDate[date];
+    
+    // Create report for this specific day
+    const report = [`# GitHub Commits Report - ${date}\n`];
+    report.push(`User: ${GITHUB_USERNAME}\n`);
+    report.push(`Total Commits: ${dayCommits.length}\n`);
     
     const repoCommits: Record<string, GitHubCommit[]> = {};
-    commitsByDate[date].forEach(commit => {
+    dayCommits.forEach(commit => {
       const repoFullName = commit.repository.full_name || commit.repository.name;
       if (!repoCommits[repoFullName]) {
         repoCommits[repoFullName] = [];
@@ -282,7 +292,7 @@ async function main() {
     });
 
     Object.keys(repoCommits).forEach(repoName => {
-      report.push(`### ${repoName}`);
+      report.push(`## ${repoName}`);
       
       repoCommits[repoName].forEach(commit => {
         const shortSha = commit.sha.substring(0, 7);
@@ -292,19 +302,15 @@ async function main() {
       
       report.push('');
     });
+
+    // Save report for this day
+    const reportPath = path.join(reportsDir, `github-commits-${date}.md`);
+    fs.writeFileSync(reportPath, report.join('\n'));
+    savedFiles.push(reportPath);
   });
-
-  // Ensure the context/commits directory exists
-  const reportsDir = path.join(process.cwd(), 'context', 'commits');
-  if (!fs.existsSync(reportsDir)) {
-    fs.mkdirSync(reportsDir, { recursive: true });
-  }
-
-  // Save report to file
-  const reportPath = path.join(reportsDir, `github-commits-${format(new Date(), 'yyyy-MM-dd')}.md`);
-  fs.writeFileSync(reportPath, report.join('\n'));
   
-  console.log(`Report saved to: ${reportPath}`);
+  console.log(`Saved ${savedFiles.length} daily reports:`);
+  savedFiles.forEach(file => console.log(`  - ${file}`));
 }
 
 main().catch(error => {

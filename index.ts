@@ -533,7 +533,7 @@ async function main() {
       // Get the current month and year
       const now = new Date();
       const currentYear = now.getFullYear();
-      const currentMonth = now.getMonth() + 1; // JavaScript months are 0-indexed
+      const currentMonth = now.getMonth(); // JavaScript months are 0-indexed
 
       // Generate reports for the current month
       await generateMonthlyReports(currentYear, currentMonth);

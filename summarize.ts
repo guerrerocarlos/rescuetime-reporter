@@ -40,6 +40,22 @@ async function readReportFile(filePath: string): Promise<string> {
 }
 
 /**
+ * Reads a GitHub commits file for a specific date
+ */
+async function readGitHubCommitsFile(date: string): Promise<string> {
+  const commitsDir = path.join(process.cwd(), 'context', 'commits');
+  const fileName = `github-commits-${date}.md`;
+  const filePath = path.join(commitsDir, fileName);
+
+  try {
+    return await fs.readFile(filePath, 'utf-8');
+  } catch (error) {
+    // If file doesn't exist, return empty string (no commits for that day)
+    return '';
+  }
+}
+
+/**
  * Ensures the summaries directory exists
  */
 async function ensureSummariesDirectory() {
@@ -59,7 +75,7 @@ async function ensureSummariesDirectory() {
 async function summaryFileExists(date: string, summariesDir: string): Promise<boolean> {
   const fileName = `summary-${date}.md`;
   const filePath = path.join(summariesDir, fileName);
-  
+
   try {
     await fs.access(filePath);
     return true; // File exists
@@ -73,7 +89,7 @@ async function summaryFileExists(date: string, summariesDir: string): Promise<bo
  */
 async function getReportFiles(): Promise<string[]> {
   const reportsDir = path.join(process.cwd(), 'reports');
-  
+
   try {
     const files = await fs.readdir(reportsDir);
     const reportFiles = files
@@ -88,7 +104,7 @@ async function getReportFiles(): Promise<string[]> {
         return compareDesc(dateB, dateA); // Sort in ascending order
       })
       .map(file => path.join(reportsDir, file.name));
-    
+
     return reportFiles;
   } catch (error) {
     console.error('Error reading reports directory:', error);
@@ -101,12 +117,12 @@ async function getReportFiles(): Promise<string[]> {
  */
 async function getExistingSummaries(): Promise<Summary[]> {
   const summariesDir = path.join(process.cwd(), 'summaries');
-  
+
   try {
     const files = await fs.readdir(summariesDir);
-    
+
     const summaries: Summary[] = [];
-    
+
     for (const file of files) {
       if (file.startsWith('summary-') && file.endsWith('.md')) {
         const date = file.replace('summary-', '').replace('.md', '');
@@ -114,7 +130,7 @@ async function getExistingSummaries(): Promise<Summary[]> {
         summaries.push({ date, content });
       }
     }
-    
+
     return summaries.sort((a, b) => {
       const dateA = parse(a.date, 'yyyy-MM-dd', new Date());
       const dateB = parse(b.date, 'yyyy-MM-dd', new Date());
@@ -129,15 +145,15 @@ async function getExistingSummaries(): Promise<Summary[]> {
 /**
  * Recursively read all files in a directory
  */
-async function readAllFilesInDirectory(directoryPath: string): Promise<{[filePath: string]: string}> {
-  const result: {[filePath: string]: string} = {};
-  
+async function readAllFilesInDirectory(directoryPath: string): Promise<{ [filePath: string]: string }> {
+  const result: { [filePath: string]: string } = {};
+
   try {
     const entries = await fs.readdir(directoryPath, { withFileTypes: true });
-    
+
     for (const entry of entries) {
       const fullPath = path.join(directoryPath, entry.name);
-      
+
       if (entry.isDirectory()) {
         const subDirFiles = await readAllFilesInDirectory(fullPath);
         Object.assign(result, subDirFiles);
@@ -153,7 +169,7 @@ async function readAllFilesInDirectory(directoryPath: string): Promise<{[filePat
   } catch (error) {
     console.error(`Error reading directory ${directoryPath}:`, error);
   }
-  
+
   return result;
 }
 
@@ -163,10 +179,10 @@ async function readAllFilesInDirectory(directoryPath: string): Promise<{[filePat
 async function getContextFilesContent(): Promise<string> {
   const contextDir = path.join(process.cwd(), 'context');
   let contextContent = '';
-  
+
   try {
     const filesContent = await readAllFilesInDirectory(contextDir);
-    
+
     for (const [filePath, content] of Object.entries(filesContent)) {
       // Add each file with a header showing its path
       const relativePath = path.relative(process.cwd(), filePath);
@@ -175,51 +191,55 @@ async function getContextFilesContent(): Promise<string> {
   } catch (error) {
     console.error('Error reading context directory:', error);
   }
-  
+
   return contextContent;
 }
 
 /**
  * Generate a summary using OpenAI API
  */
-async function generateSummary(reportContent: string, promptTemplate: string, previousSummaries: Summary[]): Promise<string> {
+async function generateSummary(reportContent: string, promptTemplate: string, previousSummaries: Summary[], date: string): Promise<string> {
   if (!OPENAI_API_KEY) {
     throw new Error('OPENAI_API_KEY not found in environment variables');
   }
-  
+
   // Get the most recent 3 summaries for context
   const recentSummaries = previousSummaries.slice(0, 3);
   let contextText = '';
-  
+
   if (recentSummaries.length > 0) {
-    contextText = 'Previous days summaries for context:\n\n';
+    contextText = 'Previous days summaries for extended context:\n\n';
     recentSummaries.forEach(summary => {
       contextText += `${summary.date}:\n${summary.content}\n\n`;
     });
   }
-  
-  // Get content from all files in /context directory
-  const contextFilesContent = await getContextFilesContent();
-  
-  const prompt = `${promptTemplate}\n\n${contextText}${contextFilesContent}\n\nReport to summarize:\n\n${reportContent}`;
-  
+
+  // Get GitHub commits for this specific date
+  const githubCommitsContent = await readGitHubCommitsFile(date);
+  let commitsContext = '';
+  if (githubCommitsContent) {
+    commitsContext = `\n\nGitHub Commits for ${date}:\n\n${githubCommitsContent}`;
+  }
+
+  const prompt = `\n${contextText}${commitsContext}\n\nReport to summarize:\n\n${reportContent}`;
+
   try {
     const response = await axios.post(
       'https://api.openai.com/v1/chat/completions',
       {
         model: 'gpt-4o-mini',
         messages: [
-          { 
-            role: 'system', 
-            content: 'You are a helpful assistant that summarizes RescueTime daily reports into concise summaries.'
+          {
+            role: 'system',
+            content: promptTemplate
           },
           {
             role: 'user',
             content: prompt
           }
         ],
-        temperature: 0.7,
-        max_tokens: 300
+        temperature: 0.7
+        // max_tokens: 300
       },
       {
         headers: {
@@ -228,11 +248,13 @@ async function generateSummary(reportContent: string, promptTemplate: string, pr
         }
       }
     );
-    
+
     return response.data.choices[0].message.content.trim();
   } catch (error) {
     console.error('Error calling OpenAI API:', error);
-    console.log(error.response.data);
+    if (error instanceof Error && 'response' in error) {
+      console.log((error as any).response.data);
+    }
     return 'Failed to generate summary due to an API error.';
   }
 }
@@ -244,61 +266,61 @@ async function main() {
   try {
     // Ensure summaries directory exists
     const summariesDir = await ensureSummariesDirectory();
-    
+
     // Get the prompt template
     const promptTemplate = await getPromptTemplate();
-    
+
     // Get all report files
     const reportFiles = await getReportFiles();
-    
+
     if (reportFiles.length === 0) {
       console.log('No report files found.');
       return;
     }
-    
+
     console.log(`Found ${reportFiles.length} report files.`);
-    
+
     // Process each report file
     for (const reportFile of reportFiles) {
       // Extract date from filename
       const match = reportFile.match(/rescuetime-report-(\d{4}-\d{2}-\d{2})\.md$/);
-      
+
       if (!match) {
         console.log(`Skipping ${reportFile} - invalid filename format`);
         continue;
       }
-      
+
       const date = match[1];
-      
+
       // Check if summary already exists
       const exists = await summaryFileExists(date, summariesDir);
       if (exists) {
         console.log(`Skipping ${date} - summary already exists`);
         continue;
       }
-      
+
       console.log(`Processing ${date}...`);
-      
+
       // Read the report content
       const reportContent = await readReportFile(reportFile);
-      
+
       // Get existing summaries for context
       const existingSummaries = await getExistingSummaries();
-      
+
       // Generate the summary
-      const summary = await generateSummary(reportContent, promptTemplate, existingSummaries);
-      
+      const summary = await generateSummary(reportContent, promptTemplate, existingSummaries, date);
+
       // Save the summary
       const summaryFileName = `summary-${date}.md`;
       const summaryFilePath = path.join(summariesDir, summaryFileName);
       await fs.writeFile(summaryFilePath, summary);
-      
+
       console.log(`Saved summary for ${date} to ${summaryFileName}`);
-      
+
       // Add the new summary to the existing ones for context in future iterations
       existingSummaries.unshift({ date, content: summary });
     }
-    
+
     console.log('All summaries generated successfully.');
   } catch (error) {
     console.error('Error generating summaries:', error);
